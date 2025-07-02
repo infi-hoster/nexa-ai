@@ -1,0 +1,497 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gemini AI Chat - Professional Dark UI</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    
+    <!-- highlight.js for syntax highlighting (using a dark theme) -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/tokyo-night-dark.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+
+    <!-- marked.js for Markdown rendering -->
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #0f172a; /* New: Slate-900 background */
+            color: #e2e8f0; /* New: Slate-200 for base text */
+        }
+        /* Custom scrollbar for new dark theme */
+        #chat-window::-webkit-scrollbar { width: 6px; }
+        #chat-window::-webkit-scrollbar-track { background: #1e293b; } /* Slate-800 */
+        #chat-window::-webkit-scrollbar-thumb { background: #475569; border-radius: 3px; } /* Slate-600 */
+        #chat-window::-webkit-scrollbar-thumb:hover { background: #64748b; } /* Slate-500 */
+
+        /* Main container animation */
+        .main-container {
+            opacity: 0;
+            animation: fadeIn 0.5s ease-in-out forwards;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        /* Chat Message Styling */
+        .chat-message {
+            display: flex;
+            align-items: flex-end;
+            gap: 0.75rem;
+            opacity: 0;
+            transform: translateY(20px);
+            animation: popIn 0.4s ease-out forwards;
+        }
+        @keyframes popIn {
+            from { opacity: 0; transform: translateY(20px) scale(0.95); }
+            to { opacity: 1; transform: translateY(0) scale(1); }
+        }
+
+        .avatar {
+            width: 2.5rem;
+            height: 2.5rem;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+            box-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1);
+        }
+        .avatar-user {
+            background-image: linear-gradient(to top right, #4f46e5, #6366f1); /* Indigo */
+            color: white;
+        }
+        .avatar-ai {
+            background-image: linear-gradient(to top right, #7c3aed, #8b5cf6); /* Violet */
+            color: white;
+        }
+
+        /* Chat bubble styling */
+        .chat-bubble {
+            max-width: 80%;
+        }
+        .chat-bubble-user { background-color: #4f46e5; color: white; } /* Indigo-600 */
+        .chat-bubble-ai { background-color: #1e293b; color: #cbd5e1; border: 1px solid #334155; } /* Slate-800, border-slate-700 */
+        .chat-bubble-ai .prose { color: #cbd5e1; } /* Slate-300 */
+        .chat-bubble-ai .prose p { margin-top: 0.5em; margin-bottom: 0.5em; }
+        .chat-bubble-ai .prose ul, .chat-bubble-ai .prose ol { margin-left: 1.25rem; }
+        .chat-bubble-ai .prose strong { color: #f1f5f9; } /* Slate-100 */
+
+        /* Typing Indicator */
+        .typing-indicator span { height: 8px; width: 8px; margin: 0 2px; background-color: #64748b; border-radius: 50%; display: inline-block; animation: pulse 1.5s infinite; } /* Slate-500 */
+        .typing-indicator span:nth-child(2) { animation-delay: 0.2s; }
+        .typing-indicator span:nth-child(3) { animation-delay: 0.4s; }
+        @keyframes pulse { 0%, 100% { opacity: 0.3; transform: scale(0.7); } 50% { opacity: 1; transform: scale(1); } }
+
+        /* Code Block Styling */
+        .code-block-container { background-color: #1a1b26; border-radius: 0.75rem; margin: 1rem 0; overflow: hidden; border: 1px solid #414868; }
+        .code-block-header { display: flex; justify-content: space-between; align-items: center; padding: 0.5rem 1rem; background-color: #292e42; color: #a9b1d6; font-size: 0.875rem; }
+        .code-block-container pre { margin: 0; padding: 1rem; white-space: pre-wrap; word-wrap: break-word; }
+        .hljs { background: transparent !important; padding: 0 !important; }
+
+        /* Action Buttons Styling */
+        .action-btn { background-color: transparent; color: #94a3b8; border: none; border-radius: 0.375rem; padding: 0.25rem; display: flex; align-items: center; cursor: pointer; transition: background-color 0.2s ease, color 0.2s ease; } /* Slate-400 */
+        .action-btn:hover { background-color: #334155; color: #e2e8f0; } /* Slate-700, Slate-200 */
+        .action-btn.copied { color: #a78bfa; } /* Violet-400 */
+        .action-btn span { margin-left: 0.5rem; font-size: 0.875rem; }
+
+        /* Feedback Buttons */
+        .feedback-container {
+            opacity: 0;
+            transition: opacity 0.3s ease;
+        }
+        .chat-bubble:hover .feedback-container {
+            opacity: 1;
+        }
+    </style>
+</head>
+<body class="flex flex-col h-screen">
+
+    <!-- Header -->
+    <header class="bg-slate-900/80 backdrop-blur-lg w-full p-4 flex items-center justify-between z-10 border-b border-slate-700 flex-shrink-0">
+        <div class="flex items-center space-x-3">
+            <div class="p-2 bg-gradient-to-br from-violet-600 to-purple-700 rounded-lg shadow-md">
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"></path></svg>
+            </div>
+            <h1 class="text-xl font-semibold text-slate-100">Gemini AI Assistant</h1>
+        </div>
+        <button id="clear-chat-btn" class="text-slate-400 hover:text-white hover:bg-slate-700 rounded-md p-2 transition" title="Clear Chat">
+            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+        </button>
+    </header>
+
+    <!-- Main Chat Area -->
+    <main class="flex-1 flex flex-col p-4 overflow-hidden main-container">
+        <div id="chat-window" class="flex-1 space-y-8 p-4 md:p-6 rounded-xl overflow-y-auto">
+            <!-- Chat messages will be dynamically added here -->
+        </div>
+
+        <!-- Typing Indicator -->
+        <div id="typing-indicator" class="hidden flex items-center p-2 space-x-3">
+             <div class="avatar avatar-ai">
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"></path></svg>
+            </div>
+            <div class="bg-slate-800 border border-slate-700 p-3 rounded-lg shadow-sm">
+                <div class="typing-indicator">
+                    <span></span><span></span><span></span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Input Form -->
+        <div class="mt-4 pt-4 border-t border-slate-700">
+            <form id="chat-form" class="relative flex items-center">
+                <input type="text" id="chat-input" placeholder="Ask me anything..." autocomplete="off"
+                    class="flex-1 p-4 pr-14 border border-slate-600 rounded-full focus:outline-none focus:ring-2 focus:ring-violet-500 transition shadow-sm bg-slate-800 text-slate-200 placeholder-slate-500">
+                <button type="submit" id="send-button"
+                    class="absolute right-2 top-1/2 -translate-y-1/2 bg-violet-600 text-white rounded-full shadow-md hover:bg-violet-700 focus:outline-none focus:ring-2 focus:ring-violet-500 focus:ring-offset-2 focus:ring-offset-slate-800 transition-all duration-200 transform hover:scale-110 flex items-center justify-center h-10 w-10">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>
+                </button>
+                 <button type="button" id="stop-button" class="hidden absolute right-2 top-1/2 -translate-y-1/2 bg-red-500 text-white rounded-full shadow-md hover:bg-red-600 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2 focus:ring-offset-slate-800 transition-all flex items-center justify-center h-10 w-10">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect></svg>
+                </button>
+            </form>
+        </div>
+    </main>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            // --- DOM Elements ---
+            const chatForm = document.getElementById('chat-form');
+            const chatInput = document.getElementById('chat-input');
+            const chatWindow = document.getElementById('chat-window');
+            const typingIndicator = document.getElementById('typing-indicator');
+            const clearChatBtn = document.getElementById('clear-chat-btn');
+            const sendButton = document.getElementById('send-button');
+            const stopButton = document.getElementById('stop-button');
+
+            // --- API & State ---
+            const apiKey = "AIzaSyBH86yzhN-sSjYO9AAc5CyIhYU4G7o6qNo";
+            const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
+            let chatHistory = [];
+            let abortController = null;
+            const initialMessage = "Hello! I'm an enhanced AI assistant. How can I help you today?";
+
+            // --- Initialization ---
+            function initializeChat() {
+                chatHistory = [];
+                chatWindow.innerHTML = '';
+                addMessageToChatWindow('ai', initialMessage, true);
+            }
+
+            // --- Event Listeners ---
+            chatForm.addEventListener('submit', handleFormSubmit);
+            clearChatBtn.addEventListener('click', initializeChat);
+            stopButton.addEventListener('click', stopGeneration);
+
+            // --- Core Functions ---
+            async function handleFormSubmit(e) {
+                e.preventDefault();
+                const userMessage = chatInput.value.trim();
+                if (!userMessage) return;
+                
+                toggleGeneratingState(true);
+                addMessageToChatWindow('user', userMessage);
+                
+                try {
+                    const aiResponse = await getAiResponse(userMessage);
+                    addMessageToChatWindow('ai', aiResponse);
+                } catch (error) {
+                    if (error.name !== 'AbortError') {
+                        console.error("Error fetching AI response:", error);
+                        if (error.message.includes("overloaded")) {
+                            addMessageToChatWindow('ai', `The AI is currently busy. Please try again in a few moments.`);
+                        } else {
+                            addMessageToChatWindow('ai', `Sorry, an error occurred: ${error.message}`);
+                        }
+                    } else {
+                        addMessageToChatWindow('ai', 'Generation stopped.');
+                    }
+                } finally {
+                    toggleGeneratingState(false);
+                }
+            }
+            
+            async function getAiResponse(userMessage) {
+                chatHistory.push({ role: "user", parts: [{ text: userMessage }] });
+                abortController = new AbortController();
+
+                const maxRetries = 3;
+                let delay = 1000;
+
+                for (let i = 0; i < maxRetries; i++) {
+                    try {
+                        // *** UPDATED: Final system instruction for professional, structured responses ***
+                        const payload = {
+                            contents: chatHistory,
+                            systemInstruction: {
+                                parts: [{ text: `You are an elite AI assistant. Your responses must be structured, professional, and information-dense.
+1.  **Structure:** Use Markdown extensively. Use headings, bullet points, and bold text to structure information for maximum clarity.
+2.  **Conciseness:** Provide only essential information. Avoid conversational filler, apologies, or self-references. Get straight to the point.
+3.  **For Coding:** Present the code block first. Follow it with a 'Key Points' section using a bulleted list for a brief, high-level explanation. Do not explain every line.
+4.  **For General Questions:** Answer directly and structure the information logically. If comparing items, use a table. If listing steps, use a numbered list.` }]
+                            },
+                            generationConfig: {
+                                temperature: 0.7,
+                                topK: 40,
+                                topP: 0.95,
+                                maxOutputTokens: 2048,
+                            }
+                        };
+
+                        const response = await fetch(apiUrl, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            signal: abortController.signal,
+                            body: JSON.stringify(payload),
+                        });
+
+                        if (!response.ok) {
+                            const errorBody = await response.json();
+                            throw new Error(errorBody.error?.message || `API Error: ${response.statusText}`);
+                        }
+
+                        const result = await response.json();
+                        if (result.candidates?.[0]?.content?.parts?.[0]) {
+                            const aiText = result.candidates[0].content.parts[0].text;
+                            chatHistory.push({ role: "model", parts: [{ text: aiText }] });
+                            return aiText;
+                        } else {
+                            return result.promptFeedback?.blockReason ? `Request was blocked. Reason: ${result.promptFeedback.blockReason}` : "I received an empty response. Please try again.";
+                        }
+
+                    } catch (error) {
+                        if (error.message.includes("overloaded") && i < maxRetries - 1) {
+                            console.warn(`Model overloaded. Retrying in ${delay}ms... (Attempt ${i + 1}/${maxRetries})`);
+                            await new Promise(resolve => setTimeout(resolve, delay));
+                            delay *= 2;
+                        } else {
+                            throw error;
+                        }
+                    }
+                }
+            }
+
+            function stopGeneration() {
+                if (abortController) {
+                    abortController.abort();
+                    toggleGeneratingState(false);
+                }
+            }
+
+            async function regenerateLastResponse() {
+                if (chatHistory.length < 2) return;
+                
+                toggleGeneratingState(true);
+                chatHistory.pop(); 
+                const lastUserPrompt = chatHistory.pop().parts[0].text;
+
+                chatWindow.removeChild(chatWindow.lastChild);
+                chatWindow.removeChild(chatWindow.lastChild);
+
+                addMessageToChatWindow('user', lastUserPrompt);
+
+                try {
+                    const aiResponse = await getAiResponse(lastUserPrompt);
+                    addMessageToChatWindow('ai', aiResponse);
+                } catch (error) {
+                    if (error.name !== 'AbortError') {
+                        addMessageToChatWindow('ai', `Sorry, an error occurred: ${error.message}`);
+                    } else {
+                         addMessageToChatWindow('ai', 'Generation stopped.');
+                    }
+                } finally {
+                    toggleGeneratingState(false);
+                }
+            }
+
+            // --- UI & DOM Manipulation ---
+            function toggleGeneratingState(isGenerating) {
+                chatInput.value = '';
+                chatInput.disabled = isGenerating;
+                sendButton.classList.toggle('hidden', isGenerating);
+                stopButton.classList.toggle('hidden', !isGenerating);
+                typingIndicator.classList.toggle('hidden', !isGenerating);
+                if (isGenerating) {
+                    chatInput.placeholder = "AI is thinking...";
+                    scrollToBottom();
+                } else {
+                    chatInput.placeholder = "Ask me anything...";
+                    chatInput.focus();
+                }
+            }
+
+            function addMessageToChatWindow(sender, message, isInitial = false) {
+                const messageContainer = document.createElement('div');
+                messageContainer.className = `chat-message w-full flex ${sender === 'user' ? 'justify-end' : 'justify-start'}`;
+                
+                const avatar = createAvatar(sender);
+                const messageBubble = document.createElement('div');
+                messageBubble.className = `chat-bubble ${sender === 'user' ? 'chat-bubble-user' : 'chat-bubble-ai'} p-4 rounded-2xl shadow-lg`;
+                
+                if (sender === 'user') {
+                    messageBubble.textContent = message;
+                } else {
+                    renderAiMessage(messageBubble, message);
+                }
+
+                if (sender === 'user') {
+                    messageContainer.appendChild(messageBubble);
+                    messageContainer.appendChild(avatar);
+                } else {
+                    messageContainer.appendChild(avatar);
+                    messageContainer.appendChild(messageBubble);
+                }
+
+                chatWindow.appendChild(messageContainer);
+
+                setTimeout(() => {
+                    messageContainer.style.opacity = '1';
+                    messageContainer.style.transform = 'translateY(0) scale(1)';
+                }, isInitial ? 0 : 50);
+
+                scrollToBottom();
+            }
+            
+            function createAvatar(sender) {
+                const avatarDiv = document.createElement('div');
+                avatarDiv.className = `avatar ${sender === 'user' ? 'avatar-user' : 'avatar-ai'}`;
+                if (sender === 'user') {
+                    avatarDiv.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>`;
+                } else {
+                    avatarDiv.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"></path></svg>`;
+                }
+                return avatarDiv;
+            }
+
+            function renderAiMessage(bubble, message) {
+                const codeBlockRegex = /```(\w+)?\n([\s\S]+?)```/g;
+                let lastIndex = 0;
+                let match;
+
+                while ((match = codeBlockRegex.exec(message)) !== null) {
+                    if (match.index > lastIndex) {
+                        const textPart = message.substring(lastIndex, match.index);
+                        bubble.appendChild(createFormattedText(textPart));
+                    }
+                    const language = match[1] || 'plaintext';
+                    const code = match[2].trim();
+                    const codeBlock = createCodeBlock(language, code);
+                    bubble.appendChild(codeBlock);
+                    hljs.highlightElement(codeBlock.querySelector('code'));
+                    lastIndex = codeBlockRegex.lastIndex;
+                }
+
+                if (lastIndex < message.length) {
+                    const remainingText = message.substring(lastIndex);
+                    bubble.appendChild(createFormattedText(remainingText));
+                }
+
+                const actionsContainer = createActionButtons();
+                bubble.appendChild(actionsContainer);
+            }
+
+            function createFormattedText(text) {
+                const container = document.createElement('div');
+                container.className = 'prose prose-sm max-w-none prose-invert';
+                container.innerHTML = marked.parse(text.trim());
+                return container;
+            }
+
+            function createCodeBlock(language, code) {
+                const container = document.createElement('div');
+                container.className = 'code-block-container';
+                const header = document.createElement('div');
+                header.className = 'code-block-header';
+                const langSpan = document.createElement('span');
+                langSpan.textContent = language;
+                const copyBtn = createCodeCopyButton(code);
+                header.appendChild(langSpan);
+                header.appendChild(copyBtn);
+                const pre = document.createElement('pre');
+                const codeEl = document.createElement('code');
+                codeEl.className = `language-${language}`;
+                codeEl.textContent = code;
+                pre.appendChild(codeEl);
+                container.appendChild(header);
+                container.appendChild(pre);
+                return container;
+            }
+
+            function createActionButtons() {
+                const container = document.createElement('div');
+                container.className = 'flex items-center justify-end space-x-2 mt-3 pt-2 border-t border-slate-700/60 feedback-container';
+                
+                const regenerateBtn = document.createElement('button');
+                regenerateBtn.className = 'action-btn';
+                regenerateBtn.title = 'Regenerate response';
+                regenerateBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M3 21v-5h5"/></svg>`;
+                regenerateBtn.onclick = regenerateLastResponse;
+
+                const thumbUpBtn = createFeedbackButton('up');
+                const thumbDownBtn = createFeedbackButton('down');
+
+                container.appendChild(regenerateBtn);
+                container.appendChild(thumbUpBtn);
+                container.appendChild(thumbDownBtn);
+                return container;
+            }
+
+            function createFeedbackButton(type) {
+                const btn = document.createElement('button');
+                btn.className = 'action-btn';
+                btn.title = type === 'up' ? 'Good response' : 'Bad response';
+                btn.innerHTML = type === 'up' ? 
+                    `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 10v12"/><path d="M15 5.88 14 10h5.83a2 2 0 0 1 1.92 2.56l-2.33 8A2 2 0 0 1 17.5 22H4a2 2 0 0 1-2-2v-8a2 2 0 0 1 2-2h2.76a2 2 0 0 0 1.79-1.11L12 2h0a2 2 0 0 1 1.79 1.11L15 5.88Z"/></svg>` :
+                    `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 14V2"/><path d="M9 18.12 10 14H4.17a2 2 0 0 1-1.92-2.56l2.33-8A2 2 0 0 1 6.5 2H20a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2h-2.76a2 2 0 0 0-1.79 1.11L12 22h0a2 2 0 0 1-1.79-1.11L9 18.12Z"/></svg>`;
+                btn.onclick = (e) => {
+                    e.currentTarget.classList.toggle('text-violet-500');
+                };
+                return btn;
+            }
+
+            function createCodeCopyButton(textToCopy) {
+                const button = document.createElement('button');
+                button.className = 'action-btn';
+                const icon = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>`;
+                const textSpan = document.createElement('span');
+                textSpan.textContent = 'Copy';
+                button.innerHTML = icon;
+                button.appendChild(textSpan);
+                button.onclick = () => {
+                    const textArea = document.createElement("textarea");
+                    textArea.value = textToCopy;
+                    textArea.style.position = "fixed";
+                    textArea.style.left = "-9999px";
+                    document.body.appendChild(textArea);
+                    textArea.select();
+                    try {
+                        document.execCommand('copy');
+                        textSpan.textContent = 'Copied!';
+                        button.classList.add('copied');
+                        setTimeout(() => {
+                            textSpan.textContent = 'Copy';
+                            button.classList.remove('copied');
+                        }, 2000);
+                    } catch (err) {
+                        textSpan.textContent = 'Error';
+                        console.error('Failed to copy text: ', err);
+                    }
+                    document.body.removeChild(textArea);
+                };
+                return button;
+            }
+
+            function scrollToBottom() {
+                chatWindow.scrollTop = chatWindow.scrollHeight;
+            }
+
+            // Start the chat
+            initializeChat();
+        });
+    </script>
+</body>
+</html>
